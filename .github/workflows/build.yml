@@ -1,10 +1,12 @@
 
-name: Build Ghostline
+name: Build Ghostline Client
 
 on:
-  workflow_dispatch:
   push:
-    branches: [main, master]
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,59 +16,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Java
+      - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
 
-      - name: Extract and locate project
-        run: |
-          mkdir -p extracted
+      - name: Grant execute permission
+        run: chmod +x gradlew
+        if: runner.os != 'Windows'
 
-          ZIP=$(find . -maxdepth 3 -type f -name "*.zip" | head -n 1)
+      - name: Build with Gradle
+        run: ./gradlew build --no-daemon
 
-          if [ -z "$ZIP" ]; then
-            echo "No ZIP found. Checking repository directly."
-            ROOT="."
-          else
-            unzip -o "$ZIP" -d extracted
-            ROOT="extracted"
-          fi
-
-          FILE=$(find "$ROOT" -type f \
-            \( -name "build.gradle" -o -name "build.gradle.kts" \) \
-            | head -n 1)
-
-          if [ -z "$FILE" ]; then
-            echo "Gradle build file not found."
-            find "$ROOT" -maxdepth 4 -type f | head -n 100
-            exit 1
-          fi
-
-          echo "PROJECT_DIR=$(dirname "$FILE")" >> "$GITHUB_ENV"
-
-      - name: Build JAR
-        run: |
-          cd "$PROJECT_DIR"
-
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew build --no-daemon --stacktrace
-          else
-            echo "gradlew missing; checking system Gradle"
-            gradle build --no-daemon --stacktrace
-          fi
-
-      - name: Upload JAR
+      - name: Upload JAR artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Ghostline-JAR
+          name: Ghostline-Client
           path: |
-            extracted/**/build/libs/*.jar
             build/libs/*.jar
+            !build/libs/*-sources.jar
           if-no-files-found: error
           
