@@ -1,9 +1,12 @@
+
 name: Build Ghostline Client
 
 on:
   workflow_dispatch:
   push:
-    branches: [main, master]
+    branches:
+      - main
+      - master
 
 permissions:
   contents: read
@@ -13,10 +16,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -27,12 +30,34 @@ jobs:
         with:
           gradle-version: '8.14.3'
 
-      - name: Build Ghostline
-        run: gradle build --no-daemon
+      - name: Diagnose project
+        run: |
+          echo "========== JAVA VERSION =========="
+          java -version
 
-      - name: Upload JAR
+          echo "========== GRADLE VERSION =========="
+          gradle --version
+
+          echo "========== PROJECT FILES =========="
+          ls -la
+          find . -maxdepth 4 -type f \
+            ! -path "./.git/*" | sort | head -200
+
+          echo "========== GRADLE CONFIGURATION =========="
+          cat settings.gradle 2>/dev/null || true
+          cat build.gradle 2>/dev/null || true
+          cat gradle.properties 2>/dev/null || true
+
+      - name: Build Ghostline
+        run: gradle build --no-daemon --stacktrace --info
+
+      - name: Upload JAR artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Ghostline-Client
-          path: build/libs/*.jar
+          path: |
+            **/build/libs/*.jar
+            !**/build/libs/*-sources.jar
+            !**/build/libs/*-javadoc.jar
           if-no-files-found: error
