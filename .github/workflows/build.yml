@@ -19,27 +19,47 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Find and extract ZIP
+        run: |
+          ZIP=$(find . -maxdepth 2 -name "*.zip" | head -n 1)
+
+          if [ -z "$ZIP" ]; then
+            echo "ZIP archive not found"
+            exit 1
+          fi
+
+          mkdir -p project
+          unzip -q "$ZIP" -d project
+
+      - name: Find Gradle project
+        run: |
+          FILE=$(find project -name gradlew -type f | head -n 1)
+
+          if [ -z "$FILE" ]; then
+            echo "Gradle wrapper not found in ZIP"
+            echo "ZIP must contain a Gradle project"
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$(dirname "$FILE")" >> "$GITHUB_ENV"
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
-
-      - name: Grant execute permission
-        run: chmod +x gradlew
 
       - name: Build JAR
-        run: ./gradlew build --no-daemon
+        run: |
+          cd "$PROJECT_DIR"
+          chmod +x gradlew
+          ./gradlew build --no-daemon
 
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
           name: Ghostline-JAR
-          path: |
-            build/libs/*.jar
-            !build/libs/*-sources.jar
-            !build/libs/*-javadoc.jar
+          path: project/**/build/libs/*.jar
           if-no-files-found: error
           retention-days: 14
           
