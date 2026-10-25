@@ -1,12 +1,10 @@
 
-name: Build Ghostline
+name: Ghostline Build
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
-      - master
+    branches: [main, master]
 
 permissions:
   contents: read
@@ -16,32 +14,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Find and extract ZIP
+      - name: Find ZIP
         run: |
-          ZIP=$(find . -maxdepth 2 -name "*.zip" | head -n 1)
+          find . -type f -name "*.zip"
+
+      - name: Extract ZIP
+        run: |
+          mkdir -p project
+          ZIP=$(find . -type f -name "*.zip" | head -n 1)
 
           if [ -z "$ZIP" ]; then
-            echo "ZIP archive not found"
+            echo "ERROR: ZIP not found"
             exit 1
           fi
 
-          mkdir -p project
-          unzip -q "$ZIP" -d project
+          unzip -o "$ZIP" -d project
 
-      - name: Find Gradle project
+      - name: Find Gradle
         run: |
-          FILE=$(find project -name gradlew -type f | head -n 1)
-
-          if [ -z "$FILE" ]; then
-            echo "Gradle wrapper not found in ZIP"
-            echo "ZIP must contain a Gradle project"
-            exit 1
-          fi
-
-          echo "PROJECT_DIR=$(dirname "$FILE")" >> "$GITHUB_ENV"
+          find project -type f \( \
+            -name "gradlew" -o \
+            -name "build.gradle" -o \
+            -name "build.gradle.kts" \
+          \)
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -49,11 +46,20 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Build JAR
+      - name: Build
         run: |
-          cd "$PROJECT_DIR"
+          set -eux
+
+          GRADLE=$(find project -type f -name gradlew | head -n 1)
+
+          if [ -z "$GRADLE" ]; then
+            echo "ERROR: Gradle wrapper not found"
+            exit 1
+          fi
+
+          cd "$(dirname "$GRADLE")"
           chmod +x gradlew
-          ./gradlew build --no-daemon
+          ./gradlew build --stacktrace
 
       - name: Upload JAR
         uses: actions/upload-artifact@v4
@@ -61,5 +67,4 @@ jobs:
           name: Ghostline-JAR
           path: project/**/build/libs/*.jar
           if-no-files-found: error
-          retention-days: 14
           
