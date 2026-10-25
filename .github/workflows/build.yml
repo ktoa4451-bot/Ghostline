@@ -1,38 +1,45 @@
-name: build
-on: [push, workflow_dispatch]
+
+name: Build Ghostline
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Prepare project
-        id: prep
-        run: |
-          if ls ./*.zip >/dev/null 2>&1; then
-            ZIP=$(ls ./*.zip | head -n1)
-            mkdir -p project
-            unzip -o "$ZIP" -d project
-            echo "dir=project" >> "$GITHUB_OUTPUT"
-          else
-            echo "dir=." >> "$GITHUB_OUTPUT"
-          fi
-
-      - uses: actions/setup-java@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 21
+          java-version: '21'
+          cache: gradle
 
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Build JAR
+        run: ./gradlew build --no-daemon
+
+      - name: Upload JAR
+        uses: actions/upload-artifact@v4
         with:
-          gradle-version: 9.2.0
-
-      - name: Build
-        run: gradle build
-        working-directory: ${{ steps.prep.outputs.dir }}
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ghostline
-          path: ${{ steps.prep.outputs.dir }}/build/libs/*.jar
+          name: Ghostline-JAR
+          path: |
+            build/libs/*.jar
+            !build/libs/*-sources.jar
+            !build/libs/*-javadoc.jar
+          if-no-files-found: error
+          retention-days: 14
+          
