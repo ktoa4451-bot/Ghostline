@@ -4,9 +4,7 @@ name: Build Ghostline Client
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
-      - master
+    branches: [main, master]
 
 permissions:
   contents: read
@@ -25,39 +23,46 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Find project directory
+        id: project
+        shell: bash
+        run: |
+          echo "Repository root:"
+          pwd
+          ls -la
+
+          if [ -f "settings.gradle" ] || [ -f "settings.gradle.kts" ]; then
+            echo "dir=." >> "$GITHUB_OUTPUT"
+          else
+            FILE=$(find . -type f \
+              \( -name settings.gradle -o -name settings.gradle.kts \) \
+              -not -path "*/.gradle/*" | head -n 1)
+
+            if [ -z "$FILE" ]; then
+              echo "::error::settings.gradle not found"
+              exit 1
+            fi
+
+            echo "dir=$(dirname "$FILE")" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.14.3'
 
-      - name: Diagnose project
-        run: |
-          echo "========== JAVA VERSION =========="
-          java -version
-
-          echo "========== GRADLE VERSION =========="
-          gradle --version
-
-          echo "========== PROJECT FILES =========="
-          ls -la
-          find . -maxdepth 4 -type f \
-            ! -path "./.git/*" | sort | head -200
-
-          echo "========== GRADLE CONFIGURATION =========="
-          cat settings.gradle 2>/dev/null || true
-          cat build.gradle 2>/dev/null || true
-          cat gradle.properties 2>/dev/null || true
-
       - name: Build Ghostline
-        run: gradle build --no-daemon --stacktrace --info
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: |
+          echo "Building from: $(pwd)"
+          ls -la
+          gradle tasks --stacktrace
+          gradle build --no-daemon --stacktrace
 
-      - name: Upload JAR artifact
+      - name: Upload JAR
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Ghostline-Client
-          path: |
-            **/build/libs/*.jar
-            !**/build/libs/*-sources.jar
-            !**/build/libs/*-javadoc.jar
+          path: '**/build/libs/*.jar'
           if-no-files-found: error
