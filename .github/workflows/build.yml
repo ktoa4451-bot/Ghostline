@@ -1,4 +1,3 @@
-
 name: Build Ghostline Client
 
 on:
@@ -23,28 +22,35 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Find project directory
-        id: project
-        shell: bash
+      - name: Extract project ZIP
         run: |
-          echo "Repository root:"
-          pwd
-          ls -la
+          set -e
+          ZIP=$(find . -maxdepth 2 -type f -iname "*.zip" | head -n 1)
 
-          if [ -f "settings.gradle" ] || [ -f "settings.gradle.kts" ]; then
-            echo "dir=." >> "$GITHUB_OUTPUT"
-          else
-            FILE=$(find . -type f \
-              \( -name settings.gradle -o -name settings.gradle.kts \) \
-              -not -path "*/.gradle/*" | head -n 1)
-
-            if [ -z "$FILE" ]; then
-              echo "::error::settings.gradle not found"
-              exit 1
-            fi
-
-            echo "dir=$(dirname "$FILE")" >> "$GITHUB_OUTPUT"
+          if [ -z "$ZIP" ]; then
+            echo "::error::Project ZIP not found"
+            exit 1
           fi
+
+          mkdir -p extracted
+          unzip -o "$ZIP" -d extracted
+
+          echo "Extracted files:"
+          find extracted -maxdepth 4 -type f | head -200
+
+      - name: Locate Gradle project
+        id: project
+        run: |
+          FILE=$(find extracted -type f \
+            \( -name settings.gradle -o -name settings.gradle.kts \) \
+            | head -n 1)
+
+          if [ -z "$FILE" ]; then
+            echo "::error::No settings.gradle found inside ZIP"
+            exit 1
+          fi
+
+          echo "dir=$(dirname "$FILE")" >> "$GITHUB_OUTPUT"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -53,16 +59,13 @@ jobs:
 
       - name: Build Ghostline
         working-directory: ${{ steps.project.outputs.dir }}
-        run: |
-          echo "Building from: $(pwd)"
-          ls -la
-          gradle tasks --stacktrace
-          gradle build --no-daemon --stacktrace
+        run: gradle build --no-daemon --stacktrace
 
       - name: Upload JAR
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Ghostline-Client
-          path: '**/build/libs/*.jar'
+          path: |
+            extracted/**/build/libs/*.jar
+            extracted/build/libs/*.jar
           if-no-files-found: error
