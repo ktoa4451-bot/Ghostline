@@ -1,5 +1,5 @@
 
-name: Ghostline Build
+name: Build Ghostline
 
 on:
   workflow_dispatch:
@@ -14,31 +14,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Find ZIP
-        run: |
-          find . -type f -name "*.zip"
-
-      - name: Extract ZIP
-        run: |
-          mkdir -p project
-          ZIP=$(find . -type f -name "*.zip" | head -n 1)
-
-          if [ -z "$ZIP" ]; then
-            echo "ERROR: ZIP not found"
-            exit 1
-          fi
-
-          unzip -o "$ZIP" -d project
-
-      - name: Find Gradle
-        run: |
-          find project -type f \( \
-            -name "gradlew" -o \
-            -name "build.gradle" -o \
-            -name "build.gradle.kts" \
-          \)
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -46,25 +23,50 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Build
+      - name: Extract and locate project
         run: |
-          set -eux
+          mkdir -p extracted
 
-          GRADLE=$(find project -type f -name gradlew | head -n 1)
+          ZIP=$(find . -maxdepth 3 -type f -name "*.zip" | head -n 1)
 
-          if [ -z "$GRADLE" ]; then
-            echo "ERROR: Gradle wrapper not found"
+          if [ -z "$ZIP" ]; then
+            echo "No ZIP found. Checking repository directly."
+            ROOT="."
+          else
+            unzip -o "$ZIP" -d extracted
+            ROOT="extracted"
+          fi
+
+          FILE=$(find "$ROOT" -type f \
+            \( -name "build.gradle" -o -name "build.gradle.kts" \) \
+            | head -n 1)
+
+          if [ -z "$FILE" ]; then
+            echo "Gradle build file not found."
+            find "$ROOT" -maxdepth 4 -type f | head -n 100
             exit 1
           fi
 
-          cd "$(dirname "$GRADLE")"
-          chmod +x gradlew
-          ./gradlew build --stacktrace
+          echo "PROJECT_DIR=$(dirname "$FILE")" >> "$GITHUB_ENV"
+
+      - name: Build JAR
+        run: |
+          cd "$PROJECT_DIR"
+
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew build --no-daemon --stacktrace
+          else
+            echo "gradlew missing; checking system Gradle"
+            gradle build --no-daemon --stacktrace
+          fi
 
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
           name: Ghostline-JAR
-          path: project/**/build/libs/*.jar
+          path: |
+            extracted/**/build/libs/*.jar
+            build/libs/*.jar
           if-no-files-found: error
           
