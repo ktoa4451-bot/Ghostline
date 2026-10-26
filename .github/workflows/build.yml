@@ -1,12 +1,11 @@
+Создай или замени файл ".github/workflows/build.yml":
 
 name: Build Ghostline Client
 
 on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
+  push:
+    branches: [main, master]
 
 permissions:
   contents: read
@@ -20,25 +19,43 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
 
-      - name: Make Gradle executable
-        run: chmod +x gradlew
+      - name: Inspect project
+        run: |
+          echo "Repository files:"
+          ls -la
+          echo "Build files:"
+          find . -maxdepth 4 \
+            \( -name "gradlew" \
+            -o -name "build.gradle" \
+            -o -name "build.gradle.kts" \
+            -o -name "settings.gradle" \
+            -o -name "settings.gradle.kts" \) \
+            -print
 
       - name: Build Ghostline
-        run: ./gradlew build --no-daemon
+        shell: bash
+        run: |
+          if [ -f ./gradlew ]; then
+            chmod +x ./gradlew
+            ./gradlew build --no-daemon
+          elif [ -f ./build.gradle ] || [ -f ./build.gradle.kts ]; then
+            echo "Gradle Wrapper missing. Add gradlew and gradle/wrapper files."
+            exit 1
+          else
+            echo "Gradle project not found in repository root."
+            exit 1
+          fi
 
-      - name: Upload build artifacts
+      - name: Upload JAR
         uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: Ghostline-Client
-          path: |
-            build/libs/*.jar
-            !build/libs/*-sources.jar
+          path: build/libs/*.jar
           if-no-files-found: error
           retention-days: 14
-          
