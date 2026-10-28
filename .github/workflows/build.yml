@@ -1,6 +1,6 @@
 name: Build GHOSTLINE CLIENT v8
 
-on:
+'on':
 workflow_dispatch:
 push:
 
