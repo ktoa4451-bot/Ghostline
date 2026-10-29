@@ -1,5 +1,5 @@
 
-name: Build Ghostline
+name: Build Ghostline v8
 
 'on':
   push:
@@ -16,70 +16,66 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java 21
+      - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
 
-      - name: Locate or extract project
+      - name: Find and extract project
         shell: bash
         run: |
           set -euo pipefail
 
-          PROJECT_DIR="$(find . -type f -name build.gradle \
+          PROJECT_DIR=""
+
+          # Ищем готовый проект
+          PROJECT_DIR="$(find . -type f \
+            \( -name build.gradle -o -name build.gradle.kts \) \
             -not -path './.git/*' \
-            -not -path '*/build/*' \
             -printf '%h\n' | head -n 1 || true)"
 
+          # Если проекта нет — ищем ZIP
           if [ -z "$PROJECT_DIR" ]; then
-            ZIP_FILE="$(find . -maxdepth 4 -type f -iname '*.zip' \
+            ZIP_FILE="$(find . -type f -iname '*.zip' \
               -not -path './.git/*' \
               -printf '%p\n' | head -n 1 || true)"
 
             if [ -z "$ZIP_FILE" ]; then
-              echo "::error::No build.gradle or project ZIP found."
-              echo "Upload the Ghostline project ZIP or its extracted files."
+              echo "::error::Project files and ZIP archive were not found."
+              echo "Upload the Ghostline ZIP to the repository."
               exit 1
             fi
 
-            mkdir -p _extracted_project
-            unzip -q "$ZIP_FILE" -d _extracted_project
+            mkdir -p extracted
+            unzip -o "$ZIP_FILE" -d extracted
 
-            PROJECT_DIR="$(find _extracted_project -type f \
-              -name build.gradle \
-              -not -path '*/build/*' \
+            PROJECT_DIR="$(find extracted -type f \
+              \( -name build.gradle -o -name build.gradle.kts \) \
               -printf '%h\n' | head -n 1 || true)"
           fi
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "::error::Could not find build.gradle."
+            echo "::error::Gradle build file not found inside the ZIP."
             exit 1
           fi
 
-          echo "Project directory: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Found project: $PROJECT_DIR"
 
-      - name: Set up Gradle
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.2.0'
+          cache-disabled: true
 
-      - name: Build mod
-        shell: bash
+      - name: Build Ghostline
         run: gradle -p "$PROJECT_DIR" build --no-daemon --stacktrace
 
-      - name: List generated JARs
-        shell: bash
-        run: |
-          find "$PROJECT_DIR/build/libs" \
-            -maxdepth 1 -type f -name '*.jar' -print || true
-
-      - name: Upload mod JAR
+      - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
-          name: ghostline
+          name: Ghostline-v8
           path: ${{ env.PROJECT_DIR }}/build/libs/*.jar
           if-no-files-found: error
           
